@@ -2,9 +2,11 @@ from math import atan, atan2, cos, sin, radians
 from random import randint, choice, choices
 import numpy as np
 from PIL import Image
+import pickle
 
 import pygame
 import re
+from scipy.special import expit, softmax
 
 
 def f_part(x):
@@ -158,19 +160,44 @@ class Board:
                 b[i][j] = self.board[i][j][3]
         img = np.array(b, dtype=np.uint8)
         img = Image.fromarray(img).convert("L")
+        d = {"0": "circle", "1": "not filled without tail", "2": "filled without tail", "3": "filled with tail"}
+        print(f"saving {d[ans]}")
         with open("images.csv", "a+")as file:
             file.write(f"{ans}," + ",".join(list(map(str, list(np.asarray(img).flatten())))))
 
     def clear(self):
         self.board = [[[0, 0, 0, 0] for _ in range(self.width + 3)] for _ in range(self.height + 3)]
 
+    def predict(self):
+        with open('weights.pkl', 'rb') as f:
+            w = pickle.load(f)
+        b = [[[] for _ in range(self.width)] for _ in range(self.height)]
+        for i in range(self.height):
+            for j in range(self.width):
+                b[i][j] = self.board[i][j][3]
+        img = np.array(b, dtype=np.uint8)
+        img = Image.fromarray(img).convert("L")
+        inputs_list = list(np.asarray(img).flatten())
+        inputs = np.array(inputs_list).reshape(len(inputs_list), 1)
+        for weights_matrix in w[:1]:
+            inputs = self.activation1(weights_matrix @ inputs)
+        inputs = self.activation2(w[1] @ inputs)
+        return inputs
+
+    def activation1(self, x):
+        return expit(x)
+
+    def activation2(self, x):
+        return softmax(x)
+
+
 
 if __name__ == '__main__':
     pygame.init()
 
     pygame.display.set_caption('Board')
-    w, h = 50, 50
-    top, left, cell_size = 5, 5, 10
+    w, h = 28, 28
+    top, left, cell_size = 5, 5, 20
     board = Board(w, h)
     board.set_view(left, top, cell_size)
     size = width, height = w * cell_size + 2 * left, h * cell_size + 2 * top
@@ -200,6 +227,8 @@ if __name__ == '__main__':
                     board.save(input())
                 if event.key == pygame.K_c:
                     board.clear()
+                if event.key == pygame.K_p:
+                    print(list(map(lambda x: '{0:.10f}'.format(x), board.predict().flatten())))
 
         screen.fill((255, 255, 255, 0))
         clock.tick(fps)
